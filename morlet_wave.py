@@ -15,10 +15,10 @@ class EMWdiEMA():
     EMA using Extended Morlet-Wave damping identification method
     ============================================================
     Literature:
-        [1]: Tomac, I., Lozina, Ž, Sedlar, D, Extended Morlet-Wave damping identification method
+        [1]: Tomac, I., Lozina, Ž., Sedlar, D., Extended Morlet-Wave damping identification method
              International journal of mechanical sciences, 117 (2017), 31-40
              doi:10.1016/j.ijmecsci.2017.01.013
-        [2]: Slavič, J, Boltežar, M., Damping identification with the Morlet-wave, Mechanical
+        [2]: Slavič, J., Boltežar, M., Damping identification with the Morlet-wave, Mechanical
              Systems and Signal Processing, 2011, Volume 25, Issue 5, July 2011, Pages 1632-1645,
              doi: 10.1016/j.ymssp.2011.01.008
     """
@@ -83,7 +83,7 @@ class EMWdiEMA():
             p1 - plots mean values along n2 axis in function of k with standard deviation from
                 the mean value
             p2 - plots just the standard deviation
-            p3 - plost the 3D map of the all damping ratios identified in the given range of
+            p3 - plots the 3D map of the all damping ratios identified in the given range of
                 parametes n2 and k
         """
         ztm = np.mean(self.zeta, 0)
@@ -120,7 +120,7 @@ class EMWdiEMA():
         Estimates damping from identified damping values usign the detect() method.
         
         Args:
-            verb - enabel/disable meaasges
+            verb - enable/disable meaasges
         """
         self.zetae = np.mean(self.zeta, 0).min()
         i = np.mean(self.zeta, 0).argmin()
@@ -134,11 +134,11 @@ class EMWdiEMA():
     def detect(self, fsearch=True, verb=False):
         """
         Metohd detects damping for given ranges of k and n2 parameters and checks if detected
-        damping is feasible. If it is not then it is set as NaN. 
+        damping is feasible. If not then it is set as NaN. 
 
         Args:
             fsearch - disable/enable searching of natural frequency
-            verb - enabel/disable meaasges
+            verb - enable/disable meaasges
         """
         kitr = 0
         for i in self.k:
@@ -188,11 +188,11 @@ def calc_ratio(omega, time, irf, tspread, k):
     calculated with different time spread parameters.
 
     Args:
-        omega - base angular frequency of the MW function
-        time - time np.array
-        irf - np.array which contains one IRF
-        tspread - tuple which contains time spread parametes n1 and n2
-        k - number of cycles of the Morlet Wave function
+        omega       - base angular frequency of the MW function
+        time        - time np.array
+        irf         - np.array which contains one IRF
+        tspread     - tuple which contains time spread parametes n1 and n2
+        k           - number of cycles of the Morlet Wave function
 
     Returns:
         M - calculated ratio
@@ -282,8 +282,8 @@ def bisek(fun, bot, upr, *arg):
     Function searches for maximum value of 1D function within given range using Bisection method
 
     Args:
-        fun - function (x, *args) -> maximum is sought againts x
-        low - bottom boundary
+        fun  - function (x, *args) -> maximum is sought againts x
+        low  - bottom boundary
         high - upper boundary
         *arg - extra arguments that are passed to a fun()
 
