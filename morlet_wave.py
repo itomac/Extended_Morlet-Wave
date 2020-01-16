@@ -6,11 +6,10 @@ Extended Morlet-Wave damping identification method
 """
 import numpy as np
 #from scipy.optimize import brentq
-from scipy.optimize import newton
 from scipy.optimize import minimize
-from scipy import special
 import matplotlib.pyplot as plt
 #from mpl_toolkits import mplot3d
+from MorletDamping.morletdamping import MorletDamping
 
 class EMWdiEMA():
     """
@@ -25,32 +24,32 @@ class EMWdiEMA():
              doi: 10.1016/j.ymssp.2011.01.008
     """
 
-    def __init__(self, time=None, irf=None, omega_estimated=None, time_spread=(7, 14),
+    def __init__(self, fs=None, irf=None, nat_freqs=None, time_spread=(7, 14),
                  num_cycls_range=None, verb=False):
         """
         Constructor of eMWDI object which sets initial parameters for the method.
 
         Args:
-            time             - time vector of the signal
+            fs               - sampling frequency of the signal
             irf              - impulse response function of the mechanical system (SDOF)
             nat_freqs        - natural frequencies in radians per second
-            time_spread      - tuple condaining n1 and n2 time sperad parametes
-            num_cycls_range  - tuple seting range of k parametr that define number of wave function
+            time_spread      - tuple containing n1 and n2 time spread parametes
+            num_cycls_range  - tuple setting range of k parameter that define number of wave function
                                cycles
-            verb             - enabel/disable meaasges
+            verb             - enable/disable messages
         Self:
-            base_time_spread      - n1 time spread parameter
-            ntime_spread_divisos       - vector of n2 parameters
-            num_cycls       - vector of all k parameters
-            omest   - estimated natural frequency (omega estimated)
+            n1      - n1 time spread parameter
+            n2       - vector of n2 parameters
+            k       - vector of all k parameters
+            omega_estimated   - estimated natural frequency (omega estimated)
             time       - time vector
             fs      - sampling frequency
             irf     - impulse response function
-            zeta    - 2d array of identified dampig ratios
-            omega   - 2d array of identified natural frequencies
-            zetae   - estimated damping ratio
-            omegae  - estimated natural frequency
-            kest    - k parameter for the estimated damping ratio
+            zeta_detected  - 2d array of identified dampig ratios
+            omega_detected - 2d array of identified natural frequencies
+            zeta    - estimated damping ratio
+            omega   - estimated natural frequency
+            k_est   - k parameter for the estimated damping ratio
 
         """
         # Initialisation
@@ -63,20 +62,20 @@ class EMWdiEMA():
         else:
             spread_jump = 1
 
-        self.base_time_spread = time_spread[0]
-        self.time_spread_divisos = np.arange(time_spread[0]+spread_jump, time_spread[1]+1)
-        self.num_cycls = np.arange(num_cycls_range[0], num_cycls_range[1]+1)
-        self.omega_estimated = omega_estimated
+        self.n1 = time_spread[0]
+        self.n2 = np.arange(time_spread[0]+spread_jump, time_spread[1]+1)
+        self.k = np.arange(num_cycls_range[0], num_cycls_range[1]+1)
+        self.omega_estimated = nat_freqs
 
-        self.time = time
         self.irf = irf
+        self.fs = fs
 
-        self.zeta_detected = np.zeros((self.time_spread_divisos.size, self.num_cycls.size))
-        self.omega_detected = np.zeros((self.time_spread_divisos.size, self.num_cycls.size))
+        self.zeta_detected = np.zeros((self.n2.size, self.k.size))
+        self.omega_detected = np.zeros((self.n2.size, self.k.size))
 
         self.zeta = 0
         self.omega = 0
-        self.k = 0
+        self.k_est = 0
 
     def plot(self, plt1=True, plt2=True, plt3=True):
         """
@@ -93,30 +92,30 @@ class EMWdiEMA():
         zt_st = np.std(self.zeta_detected, 0)
         if plt1:
             plt.figure(figsize=(8, 6), dpi=80)
-            plt.plot(self.num_cycls, zt_me)
-            plt.plot(self.num_cycls, zt_me + zt_st, '--', linewidth=1)
-            plt.plot(self.num_cycls, zt_me - zt_st, 'C1--', linewidth=1)
-            plt.plot([self.k, self.k], [np.min(zt_me), np.max(zt_me)], 'k-', linewidth=1)
+            plt.plot(self.k, zt_me)
+            plt.plot(self.k, zt_me + zt_st, '--', linewidth=1)
+            plt.plot(self.k, zt_me - zt_st, 'C1--', linewidth=1)
+            plt.plot([self.k_est, self.k_est], [np.min(zt_me), np.max(zt_me)], 'k-', linewidth=1)
             plt.xlabel(r'$k$')
             plt.ylabel(r'$\bar{\zeta}_{n_2}$')
             plt.title('Mean values of damping along n2 with std')
 
         if plt2:
             plt.figure(figsize=(8, 6), dpi=80)
-            plt.plot(self.num_cycls, zt_st)
-            plt.plot([self.k, self.k], [np.min(zt_st), np.max(zt_st)], 'k-', linewidth=1)
+            plt.plot(self.k, zt_st)
+            plt.plot([self.k_est, self.k_est], [np.min(zt_st), np.max(zt_st)], 'k-', linewidth=1)
             plt.xlabel(r'$k$')
             plt.ylabel(r'$\sigma\left(\bar{\zeta}\right)$')
             plt.title('Std dev from mean damping value')
 
         if plt3:
-            X, Y = np.meshgrid(self.num_cycls, self.time_spread_divisos)
+            X, Y = np.meshgrid(self.k, self.n2)
             plt.figure(figsize=(8, 6), dpi=80)
             ax3 = plt.axes(projection='3d')
             ax3.plot_surface(X, Y, self.zeta_detected*100, cmap='viridis')
             ax3.set(xlabel=r'$k$', ylabel=r'$n_2$', zlabel=r'$\zeta\ (\%)$', title='Damping 3D map')
-            ax3.xaxis.set_ticks(self.num_cycls)
-            ax3.yaxis.set_ticks(self.time_spread_divisos)
+            ax3.xaxis.set_ticks(self.k)
+            ax3.yaxis.set_ticks(self.n2)
 
     def estimate(self, verb=True):
         """
@@ -125,14 +124,14 @@ class EMWdiEMA():
         Args:
             verb - enable/disable meaasges
         """
-        self.zeta = np.nanmin(np.mean(self.zeta_detected, 0))
-        i = np.nanargmin(np.mean(self.zeta_detected, 0))
+        i = np.nanargmin(np.std(self.zeta_detected, 0))
+        self.zeta = np.mean(self.zeta_detected, 0)[i]
         self.omega = np.mean(self.omega_detected, 0)[i]
-        self.k = self.num_cycls[i]
+        self.k_est = self.k[i]
 
         if verb:
             print("k: %d\tzeta: %.4f %%\tomega = %.2f Hz (%.3f s^-1)"
-                  % (self.k, self.zeta*100, self.omega/(2*np.pi), self.omega))
+                  % (self.k_est, self.zeta*100, self.omega/(2*np.pi), self.omega))
 
     def detect(self, fsearch=True, verb=False):
         """
@@ -143,49 +142,52 @@ class EMWdiEMA():
             fsearch - disable/enable searching of natural frequency
             verb - enable/disable messages
         """
-        samp_freq = (self.time[1] - self.time[0])**-1
+        damp = MorletDamping(self.irf, self.fs, self.k[0], self.n1, self.n2[0])
+        damp.set_int_method(np.trapz)
+
         kitr = 0
-        for i in self.num_cycls:
-            lim = int(2*np.pi*i/(self.omega_estimated)*samp_freq + 1) # update for MDOF!
-            if lim > self.time.size:
+        for i in self.k:
+            lim = int(2*np.pi*i/(self.omega_estimated)*self.fs + 1) # update for MDOF!
+            if lim > self.irf.size:
+                # print(lim, self.omega_estimated, self.fs)
                 print('Maximum iterations reached for: k = ', i)
                 self.zeta_detected = self.zeta_detected[:, :kitr]
-                self.omega_detected = self.omega[:, :kitr]
-                self.num_cycls = self.num_cycls[:kitr]
+                self.omega_detected = self.omega_detected[:, :kitr]
+                self.k = self.k[:kitr]
                 break
-
+            damp.k = i
             nitr = 0
-            for n2 in self.time_spread_divisos:
+            for n2 in self.n2:
+                damp.n2 = n2
                 if fsearch:
-                    upr = self.omega_estimated + 1
+                    upr = self.omega_estimated + 1 # update for MDOF!!!
                     lwr = self.omega_estimated - 1
-                    # self.omega_detected[nitr, kitr], M = bisek(calc_ratio, lwr, upr, self.time, self.irf,
-                    #                                   (self.base_time_spread, n2), i)
-                    mnm = minimize(calc_ratio, x0=self.omega_estimated, args=(self.time, self.irf, \
-                                    (self.base_time_spread, n2), i), bounds=[(lwr, upr)], \
-                                    options={'gtol': 1e-2, 'disp': False})
-                    self.omega_detected[nitr, kitr] = mnm.x[0]
-                    M = -mnm.fun
-                else:
-                    M = -calc_ratio(self.omega_estimated, self.time, self.irf, \
-                                    (self.base_time_spread, n2), i)
+                    lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
+                    if lwr < lwr_test: # -1 is added above to be on the safe
+                        lwr = lwr_test # side, but with short signals it may cause problems.
 
-                if self.base_time_spread < 10:
+                    fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n1, x)) /\
+                                       np.abs(damp.morlet_integrate(damp.n2, x))
+
+                    mnm = minimize(fun_M, x0=self.omega_estimated, bounds=[(lwr, upr)], \
+                                    options={'gtol': 1e-2, 'disp': False})
+
+                    self.omega_detected[nitr, kitr] = mnm.x
+                else:
+                    self.omega_detected[nitr, kitr] = self.omega_estimated
+
+                if self.n1 < 10:
                     # Exact method
-                    # dmp = exact((self.base_time_spread, n2), i, M, verb)
-                    dmp, r = newton(exact_fun, .001, args=((self.base_time_spread, n2), i, M), \
-                                    maxiter=20, full_output=True, disp=False)
-                    if not r.converged:
-                        dmp = np.NaN
-                        if verb:
-                            print('Newton-Ralphson: maximum iterations limit reached!')
+                    damp.set_root_finding(method="exact", x0=0.001)
+                    dmp = damp.identify_damping(self.omega_detected[nitr, kitr])
                 else:
                     # Closed-form method
-                    dmp = closed_form((self.base_time_spread, n2), i, M)
+                    damp.set_root_finding(method="close")
+                    dmp = damp.identify_damping(self.omega_detected[nitr, kitr])
 
                 if isinstance(dmp, float) and dmp > 0 and dmp != np.inf:
                     self.zeta_detected[nitr, kitr] = dmp
-                    if self.base_time_spread**2/(8*np.pi*i) < dmp or n2**2/(8*np.pi*i) < dmp:
+                    if self.n1**2/(8*np.pi*i) < dmp or n2**2/(8*np.pi*i) < dmp:
                         if verb:
                             print('zeta = ', dmp)
                             print('Basic condition is not met: zeta <= n^2/(8*pi*k)')
@@ -195,150 +197,31 @@ class EMWdiEMA():
                     self.zeta_detected[nitr, kitr] = np.NaN
 
                 if verb:
-                    print("%d\t%d\t%.6f\t%.6f\t%.6f\t%.6f"
-                          % (i, n2, self.omega_estimated, self.omega_detected[nitr, kitr], M, \
+                    print("%d\t%d\t%.6f\t%.6f\t%.6f"
+                          % (i, n2, self.omega_estimated, self.omega_detected[nitr, kitr], \
                               self.zeta_detected[nitr, kitr]))
                 nitr += 1
             kitr += 1
 
-def calc_ratio(omega, time, irf, tspread, k):
-    """
-    Function calculates ratio of the absolute values from the two morlet-wave coefficients
-    calculated with different time spread parameters.
+if __name__ == "__main__":
+    fs1 = 64
+    N1 = 16*fs1
+    T1 = N1/fs1
+    t1 = np.linspace(0, T1-1/fs1, N1)
 
-    Args:
-        omega       - base angular frequency of the MW function
-        time        - time np.array
-        irf         - np.array which contains one IRF
-        tspread     - tuple which contains time spread parametes n1 and n2
-        k           - number of cycles of the Morlet Wave function
+    w1 = 2 * np.pi
+    zeta1 = 0.01
+    sig1 = np.cos(w1 * np.sqrt(1 - zeta1**2) * t1) * np.exp(-zeta1 * w1 * t1)
 
-    Returns:
-        M - calculated ratio
-    """
-    fs = (time[1] - time[0])**-1
-    n = np.asarray(tspread)
-    lim = int(2*np.pi*k / omega * fs + 1)
+    noise_std1 = np.std(sig1) * 10**(-.05 * 15) # add noise SnR = 15
+    sig1 += np.random.normal(0, noise_std1, sig1.shape)
 
-    # psi = ((2*pi)^(3/4)*sqrt(k/(n*w)))^-1*exp(-n^2*(k*pi-t*w).^2/(16*k^2*pi^2)+1i.*(k*pi-t*w))
-    A = 0.25197943553838073034791409490358 # (2*pi)^-(3/4) - calculated due to the acceleration
-    B = time*omega - k*np.pi
-    psi = A * np.sqrt(n[np.newaxis].T * omega / k) \
-        * np.exp(-(n[np.newaxis].T / (4*k*np.pi))**2 * B**2 - B*1j)
-    I = np.abs(np.trapz(irf[0:lim] * psi[:, 0:lim], time[0:lim]))
-    return -I[0] / I[1]
+#    Exact
+    identifier = EMWdiEMA(fs1, sig1, w1+0.3, (7, 14), (8, 17))
 
-# def exact(n, k, M, verb=False):
-#     """
-#     Function estimates the damping ratio using the Morlet Wave Exact method.
+#    Close form
+    # identifier = EMWdiEMA(fs1, sig1, w1+0.3, (10, 20), (8, 17))
 
-#     Args:
-#         n - array that contains n1 and n2 MW function time spread parameters
-#         k - MV function number of cycles
-#         M - ratio of the MW coefficient calculated form the signal
-
-#     Returns:
-#         dmp - estimated damping ratio
-#     """
-
-#     dmp = .001
-#     fun = exact_fun(dmp, n, k, M)
-#     count = 0
-#     while np.abs(fun) > 1e-6:
-#         if count > 20:
-#             dmp = np.NaN
-#             if verb:
-#                 print('Newton-Ralphson: maximum iterations limit reached!')
-#         else:
-#             grad = (exact_fun(dmp+1e-5, n, k, M) - fun)*1e5
-#             dmp -= fun/grad
-#             fun = exact_fun(dmp, n, k, M)
-#             count += 1
-
-#     # This method proven to be slightly slower then newton-ralphson
-#     #d = brentq(exact_fun, 0, .1, (n, k, M), xtol=1e-5, maxiter=20, full_output=False)
-
-#     return dmp
-
-def exact_fun(d, n, k, M): # arg = (n, k, M)
-    """
-    Function calculates difference between ratio of the morlet wave coefficients calculated
-    using the exact analytical expression and ones calculated form the signal, both for the
-    given parameters set. Function is used by the optimisator for the estimation of the damping
-    ratio by finding the minimal difference.
-
-    Args:
-        d - estimated damping coefficient
-        n - array that contains n1 and n2 MW function time spread parameters
-        k - MV function number of cycles
-        M - ratio of the MW coefficient calculated form the signal
-
-    Returns:
-        difference between analytical and calculated for the signal
-    """
-    return np.exp((2*np.pi*k*d/(n[0]*n[1]))**2 * (n[1]**2-n[0]**2)) * np.sqrt(n[1]/n[0]) \
-        * (special.erf(2*np.pi*k*d/n[0]+n[0]*.25) - special.erf(2*np.pi*k*d/n[0]-n[0]*.25)) \
-        / (special.erf(2*np.pi*k*d/n[1]+n[1]*.25) - special.erf(2*np.pi*k*d/n[1]-n[1]*.25)) - M
-
-def closed_form(n, k, M):
-    """
-    Function estimates the damping ratio using the Morlet Wave Closed form method.
-
-    Args:
-        n - array that contains n1 and n2 MW function time spread parameters
-        k - MV function number of cycles
-        M - ratio of the MW coefficient calculated form the signal
-
-    Returns:
-        dmp - estimated damping ratio
-    """
-
-    return .5*n[0]*n[1] / (np.pi*k * np.sqrt(n[1]**2 - n[0]**2)) \
-        * np.sqrt(np.log(M * np.sqrt(n[1]/n[0])))
-
-# def bisek(fun, bot, upr, *arg):
-#     """
-#     Function searches for maximum value of 1D function within given range using Bisection method
-
-#     Args:
-#         fun  - function (x, *args) -> maximum is sought againts x
-#         low  - bottom boundary
-#         high - upper boundary
-#         *arg - extra arguments that are passed to a fun()
-
-#     Returns:
-#         extrem, func(extrem)
-#     """
-#     a = np.zeros(3)
-#     b = np.zeros(3)
-#     eps = .01
-
-#     a[0] = .5*(bot + upr)
-#     a[1] = .5*(bot + a[0])
-#     a[2] = .5*(upr + a[0])
-
-#     args = list(arg)
-#     args.insert(0, 0)
-#     for i in range(0, 3):
-#         args[0] = a[i]
-#         b[i] = fun(*args)
-
-#     while np.abs(bot - upr) > eps:
-#         if b[0] > b[1] and b[2] > b[0]:
-#             bot = a[0]
-#         elif b[0] < b[1] and b[2] < b[0]:
-#             upr = a[0]
-#         else:
-#             bot = a[1]
-#             upr = a[2]
-
-#         a[0] = .5*(bot + upr)
-#         a[1] = .5*(bot + a[0])
-#         a[2] = .5*(upr + a[0])
-
-#         for i in range(0, 3):
-#             args[0] = a[i]
-#             b[i] = fun(*args)
-
-#     args[0] = .5*(bot + upr)
-#     return args[0], fun(*args)
+    identifier.detect(True, True)
+    identifier.estimate()
+    identifier.plot()
