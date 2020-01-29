@@ -64,8 +64,8 @@ class MorletDamping(object):
                             self.n2 / 4)\
                     -erf(2 * np.pi * self.k * x / self.n2 -\
                             self.n2 / 4)) - M
-            
-            dmp, r = newton(eqn, self.x0, maxiter=20, full_output=True, disp=False)
+
+            dmp, r = newton(eqn, self.x0, maxiter=10, full_output=True, disp=False)
 
             if not r.converged:
                 dmp = np.NaN
@@ -81,7 +81,8 @@ class MorletDamping(object):
 
     def morlet_integrate(self, n, w):
         """
-        Perform the numerical integration with a Morlet wave at circular freq `w` and time-spread parameter `n`.
+        Perform the numerical integration with a Morlet wave at circular freq `w` and time-spread
+        parameter `n`.
 
         :param n: time-spread parameter
         :param w: circular frequency (rad/s)
@@ -91,7 +92,9 @@ class MorletDamping(object):
         s = eta / w
         T = self.k * 2 * np.pi / w # eq (12)
         if T > (self.sig.size / self.fs):
-            raise ValueError("Signal is too short, %d points are needed" % np.round(T * self.fs))
+            # print("err: ", w)
+            # raise ValueError("Signal is too short, %d points are needed" % np.round(T * self.fs))
+            return np.nan
         npoints = int(np.round(T * self.fs))
         t = np.arange(npoints) / self.fs
         # From now on `t` is `t - T/2`
