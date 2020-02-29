@@ -16,7 +16,8 @@ Created on Thu Oct 08 15:58:13 2015
 from __future__ import print_function
 import numpy as np
 from scipy.integrate import simps
-from scipy.optimize import newton
+# from scipy.optimize import newton
+from scipy.optimize import ridder
 from scipy.special import erf
 
 class MorletDamping(object):
@@ -38,7 +39,7 @@ class MorletDamping(object):
         self.n1 = float(n1)
         self.n2 = float(n2)
 
-    def identify_damping(self, w):
+    def identify_damping(self, w, verb=False):
         """
         Identify damping at circular frequency `w` (rad/s)
 
@@ -65,19 +66,32 @@ class MorletDamping(object):
                     -erf(2 * np.pi * self.k * x / self.n2 -\
                             self.n2 / 4)) - M
 
-            dmp, r = newton(eqn, self.x0, maxiter=10, full_output=True, disp=False)
-
-            if not r.converged:
+            try:
+                # dmp, r = newton(eqn, self.x0, maxiter=10, full_output=True, disp=False)
+                dmp, r = ridder(eqn, self.x0[0], self.x0[1], xtol=1e-6, maxiter=10,\
+                                full_output=True, disp=False)
+                if not r.converged:
+                    dmp = np.NaN
+                    if verb:
+                        print('Newton-Ralphson: maximum iterations limit reached!')
+            except RuntimeWarning:
+                if verb:
+                    print('Newton-Ralphson raised Warning.')
+            except ValueError:
                 dmp = np.NaN
-                print('Newton-Ralphson: maximum iterations limit reached!')
+
             return dmp
 
     def set_int_method(self, method):
         self._integration = method
 
-    def set_root_finding(self, method, x0=0):
+    def set_root_finding(self, method, x0=(0, 0.01)):
         self._root_finding = method
         self.x0 = x0
+
+    # def set_root_finding(self, method, x0=0):
+    #     self._root_finding = method
+    #     self.x0 = x0
 
     def morlet_integrate(self, n, w):
         """
@@ -120,5 +134,6 @@ if __name__ == "__main__":
     print(identifier.identify_damping(w1))
 #    Exact
     identifier = MorletDamping(sig1, fs1, k1, 5, 10)
-    identifier.set_root_finding(newton, 0.1)
+    # identifier.set_root_finding(method="exact", 0.1)
+    identifier.set_root_finding(method="exact")
     print(identifier.identify_damping(w1))

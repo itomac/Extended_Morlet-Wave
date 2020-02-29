@@ -3,15 +3,17 @@
 """
 Extended Morlet-Wave damping identification method
 ==================================================
+@author: Ivan Tomac
 """
 import numpy as np
 #from scipy.optimize import brentq
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
+#from mpl_toolkits import mplot3d
+from scipy.special import erf
 from MorletDamping.morletdamping import MorletDamping
 
-class ExtendedMW():
+class ExtendedMW(object):
     """
     Extended Morlet-Wave damping identification method
     ==================================================
@@ -78,6 +80,8 @@ class ExtendedMW():
         self.zeta = 0
         self.omega = 0
         self.k_est = 0
+        self.X = 0
+        self.phi = 0
 
     def plot(self, plt1=True, plt2=True, plt3=True):
         """
@@ -129,7 +133,16 @@ class ExtendedMW():
         Args:
             verb - enable/disable meaasges
         """
-        i = np.nanargmin(np.std(self.zeta_detected, 0))
+        try:
+            i = np.nanargmin(np.std(self.zeta_detected, 0))
+        except ValueError:
+            self.zeta = np.nan
+            self.omega = np.nan
+            self.k_est = np.nan
+            if verb:
+                print("Damping not identified!")
+            return
+
         self.zeta = np.mean(self.zeta_detected, 0)[i]
         self.omega = np.mean(self.omega_detected, 0)[i]
         self.k_est = self.k[i]
@@ -138,9 +151,42 @@ class ExtendedMW():
             print("k: %d\tzeta: %.4f %%\tomega = %.2f Hz (%.3f s^-1)"
                   % (self.k_est, self.zeta*100, self.omega/(2*np.pi), self.omega))
 
-    def detect_freq(self, use_estimated=False, verb=False):
+    def detect_amplitude(self, verb=True):
         """
-        Identify natural frequency by searching the maximal absolute value of the wavelet coefficient.
+        Identify amplitude anf phase for the given natural frequency, damping ratio and k
+        """
+        if self.zeta is np.nan or self.omega is np.nan:
+            self.X = np.nan
+            self.phi = np.nan
+            if verb:
+                print("Input values are NaN.")
+            return
+
+        k = self.k_est
+        n = self.n2[-1]
+
+        damp = MorletDamping(self.irf, self.fs, k, self.n1, n)
+        damp.set_int_method(np.trapz)
+
+        I = damp.morlet_integrate(n, self.omega)
+
+        div = (2 * np.pi**3)**0.25 * np.sqrt(k / (n * self.omega)) *\
+                np.exp(np.pi * k * self.zeta * (4*np.pi * k * self.zeta - n**2) / n**2) *\
+                (erf(2 * np.pi * k * self.zeta / n + n / 4) -\
+                 erf(2 * np.pi * k * self.zeta / n - n / 4))
+
+        self.X = np.abs(I) / div
+        if np.mod(k, 2) == 0:
+            self.phi = -np.angle(I)
+        else:
+            self.phi = np.pi - np.angle(I)
+        if verb:
+            print("X: %.4e\tphi = %.4f (%.2f deg)" % (self.X, self.phi, self.phi*180/np.pi))
+
+    def detect_frequency(self, use_estimated=False, verb=False):
+        """
+        Identify natural frequency by searching the maximal absolute value of the wavelet 
+        coefficient.
 
         Args:
             use_estimated    - do not search for natural frequencies, use estimated insted
@@ -149,25 +195,26 @@ class ExtendedMW():
         if use_estimated:
             self.omega_detected = self.omega_estimated * np.ones((self.n2.size, self.k.size))
             return
+        # This part of code defines search region for the methods that requier region 
+        # instead of starting point
+        # ratio = 2*np.log2(41/40) # omega_upper / omega_center (arbitrary - 1Hz on 40Hz)
 
-        ratio = 2*np.log2(41/40) # omega_upper / omega_center (arbitrary - 1Hz on 40Hz)
+        # if self.omega_next is not None:
+        #     gold_ratio = 2 / (1 + np.sqrt(5))
+        #     omega_test = self.omega_next - (self.omega_next - self.omega_estimated) * gold_ratio
+        #     if self.omega_estimated < self.omega_next:
+        #         ratio_test = 2 * np.log2(omega_test / self.omega_estimated)
+        #         # print("A")
+        #     else:
+        #         ratio_test = -2 * np.log2(omega_test / self.omega_estimated)
+        #         # print("B")
+        #     if ratio_test < ratio:
+        #         ratio = ratio_test
+        #         # print(ratio)
 
-        if self.omega_next is not None:
-            gold_ratio = 2 / (1 + np.sqrt(5))
-            omega_test = self.omega_next - (self.omega_next - self.omega_estimated) * gold_ratio
-            if self.omega_estimated < self.omega_next:
-                ratio_test = 2 * np.log2(omega_test / self.omega_estimated)
-                # print("A")
-            else:
-                ratio_test = -2 * np.log2(omega_test / self.omega_estimated)
-                # print("B")
-            if ratio_test < ratio:
-                ratio = ratio_test
-                # print(ratio)
-
-        upr = self.omega_estimated * 2**(0.5 * ratio)
-        lwr = 2 * self.omega_estimated - upr
-        print(np.array([lwr, self.omega_estimated, upr])/(2*np.pi))
+        # upr = self.omega_estimated * 2**(0.5 * ratio)
+        # lwr = 2 * self.omega_estimated - upr
+        # print(np.array([lwr, self.omega_estimated, upr])/(2*np.pi))
 
         damp = MorletDamping(self.irf, self.fs, self.k[0], self.n1, self.n2[0])
         damp.set_int_method(np.trapz)
@@ -182,26 +229,35 @@ class ExtendedMW():
                 self.omega_detected = self.omega_detected[:, :kitr]
                 self.k = self.k[:kitr]
                 break
-
+            
+            damp.k = i
             nitr = 0
             for n2 in self.n2:
                 damp.n2 = n2
 
                 omega_test = self.omega_estimated
-                
+
+                # Adjustment of search region in case of boundary cases when high k numbers for 
+                # some natural frequencies can generate mother wavelet function larger then signal
                 # -1 is added below to be on the safe side, but with short signals it may cause problems.
-                lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
-                if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
-                    lwr = lwr_test
-                    omega_test = 0.5 * (upr + lwr)
-                    print(lwr, omega_test, upr)
+                # lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
+                # if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
+                #     lwr = lwr_test
+                #     omega_test = 0.5 * (upr + lwr)
+                #     print(lwr, omega_test, upr)
 
                 # fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n1, x)) /\
                 #                    np.abs(damp.morlet_integrate(damp.n2, x))
                 fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n2, x))
 
-                mnm = minimize(fun_M, x0=omega_test, method='Nelder-Mead', \
-                        options={'xatol': 1e-2, 'initial_simplex': np.array([[lwr], [upr]])})
+                try:
+                    mnm = minimize(fun_M, x0=omega_test, method='Powell')
+                    # mnm = minimize(fun_M, x0=omega_test, method='Nelder-Mead', \
+                    #     options={'xatol': 1e-2}) #, 'initial_simplex': np.array([[lwr], [upr]])}
+                except:
+                    print("Minimize raised RuntimeWarning.")
+                    # if verb:
+                    #     print("Minimize raised RuntimeWarning.")
 
                 self.omega_detected[nitr, kitr] = mnm.x
                 # self.omega_detected[nitr, kitr] = bisek(-fun_M, lwr, upr)[0]
@@ -217,7 +273,7 @@ class ExtendedMW():
                         break
                 if verb:
                     print("%d\t%d\t%.6f\t%.6f"
-                          % (i, n2, self.omega_estimated, self.omega_detected[nitr, kitr]))
+                          % (i, n2, omega_test, self.omega_detected[nitr, kitr]))
 
                 nitr += 1
             kitr += 1
@@ -248,48 +304,16 @@ class ExtendedMW():
             nitr = 0
             for n2 in self.n2:
                 damp.n2 = n2
-                # if fsearch:
-                #     omega_test = self.omega_estimated
-                #     upr = omega_test + 70
-                #     lwr = omega_test - 70
-                    
-                #     # -1 is added below to be on the safe side, but with short signals it may cause problems.
-                #     lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
-                #     if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
-                #         lwr = lwr_test
-                #         omega_test = 0.5 * (upr + lwr)
-                #         # print(lwr, omega_test, upr)
-
-                #     # fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n1, x)) /\
-                #     #                    np.abs(damp.morlet_integrate(damp.n2, x))
-                #     fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n2, x))
-
-                #     mnm = minimize(fun_M, x0=omega_test, method='Nelder-Mead',\
-                #             options={'xatol': 1e-2, 'initial_simplex': np.array([[lwr], [upr]])})
-
-                #     self.omega_detected[nitr, kitr] = mnm.x
-                #     # self.omega_detected[nitr, kitr] = bisek(-fun_M, lwr, upr)[0]
-                # else:
-                #     self.omega_detected[nitr, kitr] = self.omega_estimated
-
-                # if self.omega_next is not None:
-                #     test = np.array([self.omega_detected[nitr, kitr], self.omega_next])
-                #     if n2*np.max(test)/(4*np.pi*i) >= np.abs(np.diff(test)):                       
-                #         if verb:
-                #             print('Frequency resolution is insufficient!')
-                #             print(np.abs(np.diff(test)))
-                #             print('k = ', i)
-                #             print('n2 = ', n2)
-                #         break
 
                 if self.n1 < 10:
                     # Exact method
-                    damp.set_root_finding(method="exact", x0=0.001)
-                    dmp = damp.identify_damping(self.omega_detected[nitr, kitr])
+                    # damp.set_root_finding(method="exact", x0=0.001)
+                    damp.set_root_finding(method="exact")
+                    dmp = damp.identify_damping(self.omega_detected[nitr, kitr], verb)
                 else:
                     # Closed-form method
                     damp.set_root_finding(method="close")
-                    dmp = damp.identify_damping(self.omega_detected[nitr, kitr])
+                    dmp = damp.identify_damping(self.omega_detected[nitr, kitr], verb)
 
                 if isinstance(dmp, float) and dmp > 0 and dmp != np.inf:
                     if self.n1**2/(8*np.pi*i) < dmp or n2**2/(8*np.pi*i) < dmp:
@@ -323,12 +347,12 @@ if __name__ == "__main__":
     sig1 += np.random.normal(0, noise_std1, sig1.shape)
 
 #    Exact
-    identifier = ExtendedMW(fs1, sig1, w1+0.3, (7, 14), (8, 17))
+    identifier = ExtendedMW(fs1, sig1, (w1+0.3,), (7, 14), (8, 17))
 
 #    Close form
     # identifier = ExtendedMW(fs1, sig1, w1+0.3, (10, 20), (8, 17))
 
-    identifier.detect_freq(False, True)
+    identifier.detect_frequency(False, True)
     identifier.detect_damp(True)
     identifier.estimate()
     identifier.plot()
