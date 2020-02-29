@@ -1,33 +1,51 @@
-# EMWdi
+# Extended Morlet-Wave identification
 
-Extended Morlet-Wave damping identification method
+Extended Morlet-Wave identification method
 
-
+<!-- #region -->
 ## Basic usage
-Curent version only works for the SODF system. It can be applied to MDOF too, but checking if the parameters are ok for the mode separation is not implemented jet. 
+User is required to supply sampling frequncy in S/s and impulse response functions as a numpy array of shape `(number_of_samples, measure_points)`
 
-To make instance of EMWDI class, time and impulse response fucntion arrays must me supplied, estimated natural angular frequency, tuple condaining n1 and n2 time sperad parametes, tuple seting range of k parameters:
+* For SDOF systems, define estimated natural frequency as:\
+`omega = (100, )` [rad/s]
+* For MDOF systems, the first frequency in tuple is estimated one and the second one it the closest frequency to the estimated:\
+`omega = (100, 150)` [rad/s]
+
+
+Additionally to make instance of ExtendedMW class default values of tupples: `time_spread` and `num_cycls_range` can be changed. Tuple `time_spread` contains `n1` and `n2` time sperad parametes, tuple `num_cycls_range` sets the range of `k` parameter.
+<!-- #endregion -->
 
 ```python
-sys = EMWdiEMA(
-    time,
-    irf,
-    omega,
-    tsprd=(7, 14)
-    ncycl
-    )
+sys = ExtendedMW(fs=None,
+                 irf=None,
+                 nat_freqs=(None, None),
+                 time_spread=(7, 14),
+                 num_cycls_range = (30, 300))
 ```
 
-Detect damping with verbose
+Detect natural frequencies:\
+note: first argument of the method enables/disables natural frequency identification
 
 ```python
-sys.detect(True, True)
+sys.detect_frequency(False, True)
+```
+
+Detect damping with verbose:
+
+```python
+sys.detect_damp(True)
 ```
 
 If everything went well estimate damping ratio and natural frequerncy:
 
 ```python
 sys.estimate()
+```
+
+Detect amplitude and phase vith verbose:
+
+```python
+sys.detect_amplitude(True)
 ```
 
 Optionaly identification can be ploted using the following metod:

@@ -196,7 +196,7 @@ class ExtendedMW(object):
             self.omega_detected = self.omega_estimated * np.ones((self.n2.size, self.k.size))
             return
         # This part of code defines search region for the methods that requier region 
-        # instead of starting point
+        # instead of starting point.
         # ratio = 2*np.log2(41/40) # omega_upper / omega_center (arbitrary - 1Hz on 40Hz)
 
         # if self.omega_next is not None:
@@ -238,7 +238,7 @@ class ExtendedMW(object):
                 omega_test = self.omega_estimated
 
                 # Adjustment of search region in case of boundary cases when high k numbers for 
-                # some natural frequencies can generate mother wavelet function larger then signal
+                # some natural frequencies can generate mother wavelet function larger then signal.
                 # -1 is added below to be on the safe side, but with short signals it may cause problems.
                 # lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
                 # if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
