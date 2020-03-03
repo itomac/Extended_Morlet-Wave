@@ -2,9 +2,6 @@
 
 Morlet-wave method for identification of damping is published in 1. and extension of the method for identification of damping is published in 2.
 
-1. Tomac, I., Lozina, Ž., Sedlar, D. Extended Morlet-Wave damping identification method International journal of mechanical sciences, 117 (2017), 31-40 doi: 10.1016/j.ijmecsci.2017.01.013
-2. Slavič, J., Boltežar, M., Damping identification with the Morlet-wave, Mechanical Systems and Signal Processing, 2011, Volume 25, Issue 5, July 2011, Pages 1632-1645, doi: 10.1016/j.ymssp.2011.01.008
-
 <!-- #region -->
 ## Basic usage
 User is required to supply sampling frequncy in S/s and impulse response functions as a numpy array of shape `(number_of_samples, measure_points)`
@@ -58,3 +55,8 @@ sys.plot()
 ```
 
 **Run simple example from jupyter notebook!**
+
+
+## References
+1. Tomac, I., Lozina, Ž., Sedlar, D. Extended Morlet-Wave damping identification method International journal of mechanical sciences, 117 (2017), 31-40 doi: 10.1016/j.ijmecsci.2017.01.013
+2. Slavič, J., Boltežar, M., Damping identification with the Morlet-wave, Mechanical Systems and Signal Processing, 2011, Volume 25, Issue 5, July 2011, Pages 1632-1645, doi: 10.1016/j.ymssp.2011.01.008
