@@ -6,8 +6,8 @@ Extended Morlet-Wave damping identification method
 @author: Ivan Tomac
 """
 import numpy as np
-#from scipy.optimize import brentq
-from scipy.optimize import minimize
+# from scipy.optimize import minimize
+from scipy.optimize import minimize_scalar
 import matplotlib.pyplot as plt
 #from mpl_toolkits import mplot3d
 from scipy.special import erf
@@ -148,7 +148,7 @@ class ExtendedMW(object):
         self.k_est = self.k[i]
 
         if verb:
-            print("k: %d\tzeta: %.4f %%\tomega = %.2f Hz (%.3f s^-1)"
+            print("k: %d\tzeta: %.4f%%\tomega = %.2f Hz (%.3f s^-1)"
                   % (self.k_est, self.zeta*100, self.omega/(2*np.pi), self.omega))
 
     def detect_amplitude(self, verb=True):
@@ -197,24 +197,24 @@ class ExtendedMW(object):
             return
         # This part of code defines search region for the methods that requier region 
         # instead of starting point.
-        # ratio = 2*np.log2(41/40) # omega_upper / omega_center (arbitrary - 1Hz on 40Hz)
+        ratio = 2*np.log2(61/60) # omega_upper / omega_center (arbitrary - 1Hz on 60Hz)
 
-        # if self.omega_next is not None:
-        #     gold_ratio = 2 / (1 + np.sqrt(5))
-        #     omega_test = self.omega_next - (self.omega_next - self.omega_estimated) * gold_ratio
-        #     if self.omega_estimated < self.omega_next:
-        #         ratio_test = 2 * np.log2(omega_test / self.omega_estimated)
-        #         # print("A")
-        #     else:
-        #         ratio_test = -2 * np.log2(omega_test / self.omega_estimated)
-        #         # print("B")
-        #     if ratio_test < ratio:
-        #         ratio = ratio_test
-        #         # print(ratio)
+        if self.omega_next is not None:
+            gold_ratio = 2 / (1 + np.sqrt(5))
+            omega_test = self.omega_next - (self.omega_next - self.omega_estimated) * gold_ratio
+            if self.omega_estimated < self.omega_next:
+                ratio_test = 2 * np.log2(omega_test / self.omega_estimated)
+                # print("A")
+            else:
+                ratio_test = -2 * np.log2(omega_test / self.omega_estimated)
+                # print("B")
+            if ratio_test < ratio:
+                ratio = ratio_test
+                # print(ratio)
 
-        # upr = self.omega_estimated * 2**(0.5 * ratio)
-        # lwr = 2 * self.omega_estimated - upr
-        # print(np.array([lwr, self.omega_estimated, upr])/(2*np.pi))
+        upr = self.omega_estimated * 2**(0.5 * ratio)
+        lwr = 2 * self.omega_estimated - upr
+        print(np.array([lwr, self.omega_estimated, upr])/(2*np.pi))
 
         damp = MorletDamping(self.irf, self.fs, self.k[0], self.n1, self.n2[0])
         damp.set_int_method(np.trapz)
@@ -240,27 +240,30 @@ class ExtendedMW(object):
                 # Adjustment of search region in case of boundary cases when high k numbers for 
                 # some natural frequencies can generate mother wavelet function larger then signal.
                 # -1 is added below to be on the safe side, but with short signals it may cause problems.
-                # lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
-                # if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
-                #     lwr = lwr_test
-                #     omega_test = 0.5 * (upr + lwr)
-                #     print(lwr, omega_test, upr)
+                lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
+                if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
+                    lwr = lwr_test
+                    omega_test = 0.5 * (upr + lwr)
+                    print(lwr, omega_test, upr)
 
                 # fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n1, x)) /\
                 #                    np.abs(damp.morlet_integrate(damp.n2, x))
                 fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n2, x))
 
                 try:
-                    mnm = minimize(fun_M, x0=omega_test, method='Powell')
-                    # mnm = minimize(fun_M, x0=omega_test, method='Nelder-Mead', \
-                    #     options={'xatol': 1e-2}) #, 'initial_simplex': np.array([[lwr], [upr]])}
+                    mnm = minimize_scalar(fun_M, bounds=(lwr, upr), method='bounded', \
+                        options={'maxiter': 20, 'disp': 0})
+                    # mnm = minimize(fun_M, x0=omega_test, method='Powell')
                 except:
                     print("Minimize raised RuntimeWarning.")
                     # if verb:
                     #     print("Minimize raised RuntimeWarning.")
 
-                self.omega_detected[nitr, kitr] = mnm.x
-                # self.omega_detected[nitr, kitr] = bisek(-fun_M, lwr, upr)[0]
+                try:
+                    self.omega_detected[nitr, kitr] = mnm.x
+                except UnboundLocalError:
+                    self.omega_detected[nitr, kitr] = np.nan
+                    print("Raised UnboundLocalError.")
 
                 if self.omega_next is not None:
                     test = np.array([self.omega_detected[nitr, kitr], self.omega_next])
@@ -304,6 +307,12 @@ class ExtendedMW(object):
             nitr = 0
             for n2 in self.n2:
                 damp.n2 = n2
+
+                if np.isnan(self.omega_detected[nitr, kitr]):
+                    self.zeta_detected[nitr, kitr] = np.NaN
+                    if verb:
+                        print("Damping not detected because frequency is not detected.")
+                    break
 
                 if self.n1 < 10:
                     # Exact method
@@ -356,39 +365,3 @@ if __name__ == "__main__":
     identifier.detect_damp(True)
     identifier.estimate()
     identifier.plot()
-
-# def bisek(fun, bot, upr, *arg):
-#     a = np.zeros(3)
-#     b = np.zeros(3)
-#     eps = .01
-
-#     a[0] = .5*(bot + upr)
-#     a[1] = .5*(bot + a[0])
-#     a[2] = .5*(upr + a[0])
-
-#     args = list(arg)
-#     args.insert(0, 0)
-#     for i in range(3):
-#         args[0] = a[i]
-#         b[i] = fun(*args)
-#     cnt = 0
-#     while np.abs(bot - upr) > eps:
-#         if b[0] > b[1] and b[2] > b[0]:
-#             bot = a[0]
-#         elif b[0] < b[1] and b[2] < b[0]:
-#             upr = a[0]
-#         else:
-#             bot = a[1]
-#             upr = a[2]
-
-#         a[0] = .5*(bot + upr)
-#         a[1] = .5*(bot + a[0])
-#         a[2] = .5*(upr + a[0])
-#         for i in range(0, 3):
-#             args[0] = a[i]
-#             b[i] = fun(*args)
-#         cnt += 1
-#         # print(cnt, args[0], b[0])
-
-#     args[0] = .5*(bot + upr)
-#     return args[0], fun(*args)
