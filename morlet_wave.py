@@ -10,6 +10,7 @@ import numpy as np
 from scipy.optimize import minimize_scalar
 import matplotlib.pyplot as plt
 #from mpl_toolkits import mplot3d
+# pylint: disable=no-name-in-module
 from scipy.special import erf
 from MorletDamping.morletdamping import MorletDamping
 
@@ -36,8 +37,8 @@ class ExtendedMW(object):
             irf              - impulse response function of the mechanical system (SDOF)
             nat_freqs        - natural frequencies (main and the closest one) in radians per second
             time_spread      - tuple containing n1 and n2 time spread parametes
-            num_cycls_range  - tuple setting range of k parameter that define number of wave function
-                               cycles
+            num_cycls_range  - tuple setting range of k parameter that define number of wave
+                               function cycles
             verb             - enable/disable messages
         Self:
             n1              - n1 time spread parameter
@@ -185,7 +186,7 @@ class ExtendedMW(object):
 
     def detect_frequency(self, use_estimated=False, verb=False):
         """
-        Identify natural frequency by searching the maximal absolute value of the wavelet 
+        Identify natural frequency by searching the maximal absolute value of the wavelet
         coefficient.
 
         Args:
@@ -195,7 +196,7 @@ class ExtendedMW(object):
         if use_estimated:
             self.omega_detected = self.omega_estimated * np.ones((self.n2.size, self.k.size))
             return
-        # This part of code defines search region for the methods that requier region 
+        # This part of code defines search region for the methods that requier region
         # instead of starting point.
         ratio = 2*np.log2(61/60) # omega_upper / omega_center (arbitrary - 1Hz on 60Hz)
 
@@ -229,7 +230,7 @@ class ExtendedMW(object):
                 self.omega_detected = self.omega_detected[:, :kitr]
                 self.k = self.k[:kitr]
                 break
-            
+
             damp.k = i
             nitr = 0
             for n2 in self.n2:
@@ -237,9 +238,10 @@ class ExtendedMW(object):
 
                 omega_test = self.omega_estimated
 
-                # Adjustment of search region in case of boundary cases when high k numbers for 
+                # Adjustment of search region in case of boundary cases when high k numbers for
                 # some natural frequencies can generate mother wavelet function larger then signal.
-                # -1 is added below to be on the safe side, but with short signals it may cause problems.
+                # -1 is added below to be on the safe side, but with short signals it may cause
+                # problems.
                 lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
                 if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
                     lwr = lwr_test
@@ -254,7 +256,7 @@ class ExtendedMW(object):
                     mnm = minimize_scalar(fun_M, bounds=(lwr, upr), method='bounded', \
                         options={'maxiter': 20, 'disp': 0})
                     # mnm = minimize(fun_M, x0=omega_test, method='Powell')
-                except:
+                except RuntimeWarning:
                     print("Minimize raised RuntimeWarning.")
                     # if verb:
                     #     print("Minimize raised RuntimeWarning.")
@@ -267,7 +269,7 @@ class ExtendedMW(object):
 
                 if self.omega_next is not None:
                     test = np.array([self.omega_detected[nitr, kitr], self.omega_next])
-                    if n2*np.max(test)/(4*np.pi*i) >= np.abs(np.diff(test)):                       
+                    if n2*np.max(test)/(4*np.pi*i) >= np.abs(np.diff(test)):
                         if verb:
                             print('Frequency resolution is insufficient!')
                             print(np.abs(np.diff(test)))
@@ -325,13 +327,13 @@ class ExtendedMW(object):
                     dmp = damp.identify_damping(self.omega_detected[nitr, kitr], verb)
 
                 if isinstance(dmp, float) and dmp > 0 and dmp != np.inf:
+                    self.zeta_detected[nitr, kitr] = dmp
                     if self.n1**2/(8*np.pi*i) < dmp or n2**2/(8*np.pi*i) < dmp:
                         if verb:
                             print('zeta = ', dmp)
                             print('Basic condition is not met: zeta <= n^2/(8*pi*k)')
                             print('k = ', i, '\tIteration: ', kitr)
                         self.zeta_detected[nitr, kitr] = np.NaN
-                    self.zeta_detected[nitr, kitr] = dmp
                 else:
                     self.zeta_detected[nitr, kitr] = np.NaN
 

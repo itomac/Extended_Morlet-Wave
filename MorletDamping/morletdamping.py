@@ -5,7 +5,7 @@ method using Morlet wave, based on [1]:
 
 [1] J. Slavič, M. Boltežar, Damping identification with the Morlet-
 wave, Mechanical Systems and Signal Processing. 25 (2011) 1632–1645.
-doi:10.1016/j.ymssp.2011.01.008. 
+doi:10.1016/j.ymssp.2011.01.008.
 
 Check http://lab.fs.uni-lj.si/ladisk/?what=abstract&ID=58 for more info.
 
@@ -18,6 +18,7 @@ import numpy as np
 from scipy.integrate import simps
 # from scipy.optimize import newton
 from scipy.optimize import ridder
+# pylint: disable=no-name-in-module
 from scipy.special import erf
 
 class MorletDamping(object):
@@ -55,7 +56,7 @@ class MorletDamping(object):
             # eq (19):
             eqn = lambda x: np.exp(4 * np.pi**2 * self.k**2\
                 * x**2 * (self.n2**2 -\
-                self.n1**2) / self.n1**2 / self.n2**2 ) *\
+                self.n1**2) / self.n1**2 / self.n2**2) *\
                 np.sqrt(self.n2 / self.n1) *\
                 (erf(2 * np.pi * self.k * x / self.n1 +\
                             self.n1 / 4)\
