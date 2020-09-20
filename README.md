@@ -7,7 +7,7 @@ Morlet-wave method for identification of damping is published in 1. and extensio
 User is required to supply sampling frequncy in S/s and impulse response functions as a numpy array of shape `(number_of_samples, measure_points)`
 
 * For SDOF systems, define estimated natural frequency as:\
-`omega = (100, )` [rad/s]
+`omega = (100, None)` [rad/s]
 * For MDOF systems, the first frequency in tuple is estimated one and the second one it the closest frequency to the estimated:\
 `omega = (100, 150)` [rad/s]
 

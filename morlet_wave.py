@@ -63,7 +63,7 @@ class ExtendedMW(object):
         elif time_spread[0] == 10 and time_spread[1] == 20:
             spread_jump = 1 + 4 # it is noticed that for lower damping 4 is slightly better
         else:
-            spread_jump = 1
+            spread_jump = 3
 
         self.n1 = time_spread[0]
         self.n2 = np.arange(time_spread[0]+spread_jump, time_spread[1]+1)
@@ -76,7 +76,8 @@ class ExtendedMW(object):
         self.fs = fs
 
         self.zeta_detected = np.zeros((self.n2.size, self.k.size))
-        self.omega_detected = np.zeros((self.n2.size, self.k.size))
+        self.omega_detected = np.zeros(self.k.size)
+        # self.omega_detected = np.zeros((self.n2.size, self.k.size))
 
         self.zeta = 0
         self.omega = 0
@@ -145,7 +146,7 @@ class ExtendedMW(object):
             return
 
         self.zeta = np.mean(self.zeta_detected, 0)[i]
-        self.omega = np.mean(self.omega_detected, 0)[i]
+        self.omega = self.omega_detected[i]
         self.k_est = self.k[i]
 
         if verb:
@@ -196,9 +197,10 @@ class ExtendedMW(object):
         if use_estimated:
             self.omega_detected = self.omega_estimated * np.ones((self.n2.size, self.k.size))
             return
-        # This part of code defines search region for the methods that requier region
-        # instead of starting point.
-        ratio = 2*np.log2(61/60) # omega_upper / omega_center (arbitrary - 1Hz on 60Hz)
+        #####################################################################################
+        # This part of code defines search region for the methods that requier bounded region
+        # instead of a starting point.
+        ratio = 2*np.log2(31/30) # omega_upper / omega_center (arbitrary - 1Hz on 60Hz)
 
         if self.omega_next is not None:
             gold_ratio = 2 / (1 + np.sqrt(5))
@@ -215,72 +217,68 @@ class ExtendedMW(object):
 
         upr = self.omega_estimated * 2**(0.5 * ratio)
         lwr = 2 * self.omega_estimated - upr
-        print(np.array([lwr, self.omega_estimated, upr])/(2*np.pi))
+        print(np.array([lwr, self.omega_estimated, upr])/(2*np.pi)) # for debugging purposes
+        #####################################################################################
 
         damp = MorletDamping(self.irf, self.fs, self.k[0], self.n1, self.n2[0])
         damp.set_int_method(np.trapz)
 
         kitr = 0
         for i in self.k:
-            lim = int(2*np.pi*i/(self.omega_estimated)*self.fs + 1)
+            lim = int(2*np.pi*i/(self.omega_estimated)*self.fs + 1)     # [2] Eq.(12)
             if lim > self.irf.size:
                 # print(lim, self.omega_estimated, self.fs)
                 print('Maximum iterations reached for: k = ', i)
                 self.zeta_detected = self.zeta_detected[:, :kitr]
-                self.omega_detected = self.omega_detected[:, :kitr]
+                self.omega_detected = self.omega_detected[:kitr]
                 self.k = self.k[:kitr]
                 break
 
             damp.k = i
-            nitr = 0
-            for n2 in self.n2:
-                damp.n2 = n2
 
-                omega_test = self.omega_estimated
+            omega_test = self.omega_estimated
 
-                # Adjustment of search region in case of boundary cases when high k numbers for
-                # some natural frequencies can generate mother wavelet function larger then signal.
-                # -1 is added below to be on the safe side, but with short signals it may cause
-                # problems.
-                lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
-                if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
-                    lwr = lwr_test
-                    omega_test = 0.5 * (upr + lwr)
-                    print(lwr, omega_test, upr)
+            # Adjustment of search region in case of boundary cases with high k numbers for
+            # some natural frequencies can generate mother wavelet function larger then signal.
+            # -1 is added below to be on the safe side, but with short signals it may cause
+            # problems.
+            lwr_test = 2 * np.pi * i * self.fs / (self.irf.size - 1)
+            if lwr < lwr_test or i > int((self.irf.size - 1) * lwr / (2*np.pi*self.fs)):
+                lwr = lwr_test
+                omega_test = 0.5 * (upr + lwr)
+                print(lwr, omega_test, upr)
 
-                # fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n1, x)) /\
-                #                    np.abs(damp.morlet_integrate(damp.n2, x))
-                fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n2, x))
+            # fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n1, x)) /\
+            #                    np.abs(damp.morlet_integrate(damp.n2, x))
+            fun_M = lambda x: -np.abs(damp.morlet_integrate(damp.n1, x))
 
-                try:
-                    mnm = minimize_scalar(fun_M, bounds=(lwr, upr), method='bounded', \
-                        options={'maxiter': 20, 'disp': 0})
-                    # mnm = minimize(fun_M, x0=omega_test, method='Powell')
-                except RuntimeWarning:
-                    print("Minimize raised RuntimeWarning.")
-                    # if verb:
-                    #     print("Minimize raised RuntimeWarning.")
+            try:
+                mnm = minimize_scalar(fun_M, bounds=(lwr, upr), method='bounded', \
+                    options={'maxiter': 20, 'disp': 0})
+                # mnm = minimize(fun_M, x0=omega_test, method='Powell')
+            except RuntimeWarning:
+                print("Minimize raised RuntimeWarning.")
+                # if verb:
+                #     print("Minimize raised RuntimeWarning.")
 
-                try:
-                    self.omega_detected[nitr, kitr] = mnm.x
-                except UnboundLocalError:
-                    self.omega_detected[nitr, kitr] = np.nan
-                    print("Raised UnboundLocalError.")
+            try:
+                self.omega_detected[kitr] = mnm.x
+            except UnboundLocalError:
+                self.omega_detected[kitr] = np.nan
+                print("Raised UnboundLocalError.")
 
-                if self.omega_next is not None:
-                    test = np.array([self.omega_detected[nitr, kitr], self.omega_next])
-                    if n2*np.max(test)/(4*np.pi*i) >= np.abs(np.diff(test)):
-                        if verb:
-                            print('Frequency resolution is insufficient!')
-                            print(np.abs(np.diff(test)))
-                            print('k = ', i)
-                            print('n2 = ', n2)
-                        break
-                if verb:
-                    print("%d\t%d\t%.6f\t%.6f"
-                          % (i, n2, omega_test, self.omega_detected[nitr, kitr]))
+            if self.omega_next is not None:
+                test = np.array([self.omega_detected[kitr], self.omega_next])
+                if self.n2[-1]*np.max(test)/(4*np.pi*i) >= np.abs(np.diff(test)):    # [2] Eq.(24)
+                    if verb:
+                        print('Frequency resolution is insufficient!')
+                        print(np.abs(np.diff(test)))
+                        print('k = ', i)
+                        print('n2 = ', self.n2[-1])
+                    break
+            if verb:
+                print("%d\t%.6f\t%.6f" % (i, omega_test, self.omega_detected[kitr]))
 
-                nitr += 1
             kitr += 1
 
     def detect_damp(self, verb=False):
@@ -297,7 +295,7 @@ class ExtendedMW(object):
 
         kitr = 0
         for i in self.k:
-            lim = int(2*np.pi*i/(self.omega_estimated)*self.fs + 1)
+            lim = int(2*np.pi*i/(self.omega_estimated)*self.fs + 1)     # [2] Eq.(12)
             if lim > self.irf.size:
                 # print(lim, self.omega_estimated, self.fs)
                 print('Maximum iterations reached for: k = ', i)
@@ -310,7 +308,7 @@ class ExtendedMW(object):
             for n2 in self.n2:
                 damp.n2 = n2
 
-                if np.isnan(self.omega_detected[nitr, kitr]):
+                if np.isnan(self.omega_detected[kitr]):
                     self.zeta_detected[nitr, kitr] = np.NaN
                     if verb:
                         print("Damping not detected because frequency is not detected.")
@@ -320,33 +318,34 @@ class ExtendedMW(object):
                     # Exact method
                     # damp.set_root_finding(method="exact", x0=0.001)
                     damp.set_root_finding(method="exact")
-                    dmp = damp.identify_damping(self.omega_detected[nitr, kitr], verb)
+                    dmp = damp.identify_damping(self.omega_detected[kitr], verb)
                 else:
                     # Closed-form method
                     damp.set_root_finding(method="close")
-                    dmp = damp.identify_damping(self.omega_detected[nitr, kitr], verb)
+                    dmp = damp.identify_damping(self.omega_detected[kitr], verb)
 
                 if isinstance(dmp, float) and dmp > 0 and dmp != np.inf:
                     self.zeta_detected[nitr, kitr] = dmp
-                    if self.n1**2/(8*np.pi*i) < dmp or n2**2/(8*np.pi*i) < dmp:
+                    #if self.n1**2/(8*np.pi*i) < dmp or n2**2/(8*np.pi*i) < dmp:
+                    if i > self.n1**2/(8*np.pi*dmp):    # [2] Eq.(21)
+                        self.zeta_detected[nitr, kitr] = np.NaN
                         if verb:
                             print('zeta = ', dmp)
-                            print('Basic condition is not met: zeta <= n^2/(8*pi*k)')
+                            print('Basic condition is not met: k <= n^2/(8*pi*zeta)')
                             print('k = ', i, '\tIteration: ', kitr)
-                        self.zeta_detected[nitr, kitr] = np.NaN
                 else:
                     self.zeta_detected[nitr, kitr] = np.NaN
 
                 if verb:
                     print("%d\t%d\t%.6f\t%.6f"
-                          % (i, n2, self.omega_detected[nitr, kitr], \
+                          % (i, n2, self.omega_detected[kitr], \
                               self.zeta_detected[nitr, kitr]))
                 nitr += 1
             kitr += 1
 
 if __name__ == "__main__":
     fs1 = 64
-    N1 = 16 * fs1
+    N1 = 48 * fs1
     T1 = N1 / fs1
     t1 = np.linspace(0, T1 - 1/fs1, N1)
 
@@ -354,14 +353,14 @@ if __name__ == "__main__":
     zeta1 = 0.01
     sig1 = np.cos(w1 * np.sqrt(1 - zeta1**2) * t1) * np.exp(-zeta1 * w1 * t1)
 
-    noise_std1 = np.std(sig1) * 10**(-.05 * 15) # add noise SnR = 15
+    noise_std1 = np.std(sig1) * 10**(-.05 * 15) # add noise SnR = 25
     sig1 += np.random.normal(0, noise_std1, sig1.shape)
 
 #    Exact
-    identifier = ExtendedMW(fs1, sig1, (w1+0.3,), (7, 14), (8, 17))
+    identifier = ExtendedMW(fs1, sig1, (w1+0.125, None), (7, 14), (25, 48))
 
 #    Close form
-    # identifier = ExtendedMW(fs1, sig1, w1+0.3, (10, 20), (8, 17))
+    # identifier = ExtendedMW(fs1, sig1, w1+0.125, (10, 20), (25, 48))
 
     identifier.detect_frequency(False, True)
     identifier.detect_damp(True)
