@@ -45,31 +45,25 @@ class MorletDamping(object):
         Identify damping at circular frequency `w` (rad/s)
 
         """
-        M = np.abs(self.morlet_integrate(self.n1, w)) /\
-            np.abs(self.morlet_integrate(self.n2, w))
+        M = np.abs(self.morlet_integrate(self.n1, w)) \
+          / np.abs(self.morlet_integrate(self.n2, w))
         if self._root_finding == "close":
-            return self.n1 * self.n2 / 2 / np.pi /\
-                np.sqrt(self.k * self.k * (self.n2 *\
-                self.n2 - self.n1 * self.n1)) *\
-                np.sqrt(np.log(np.sqrt(self.n1 / self.n2) * M))
+            dmp = self.n1 * self.n2 / 2 / np.pi \
+                / np.sqrt(self.k * self.k * (self.n2 * self.n2 - self.n1 * self.n1)) \
+                * np.sqrt(np.log(np.sqrt(self.n1 / self.n2) * M))
         else:
             # eq (19):
-            eqn = lambda x: np.exp(4 * np.pi**2 * self.k**2\
-                * x**2 * (self.n2**2 -\
-                self.n1**2) / self.n1**2 / self.n2**2) *\
-                np.sqrt(self.n2 / self.n1) *\
-                (erf(2 * np.pi * self.k * x / self.n1 +\
-                            self.n1 / 4)\
-                    -erf(2 * np.pi * self.k * x / self.n1 -\
-                            self.n1 / 4)) /\
-                (erf(2 * np.pi * self.k * x / self.n2 +\
-                            self.n2 / 4)\
-                    -erf(2 * np.pi * self.k * x / self.n2 -\
-                            self.n2 / 4)) - M
+            eqn = lambda x: np.exp(4 * np.pi**2 * self.k**2 * x**2 \
+                        * (self.n2**2 - self.n1**2) / self.n1**2 / self.n2**2) \
+                    * np.sqrt(self.n2 / self.n1) \
+                    * (erf(2 * np.pi * self.k * x / self.n1 + self.n1 / 4) \
+                        - erf(2 * np.pi * self.k * x / self.n1 - self.n1 / 4)) \
+                    / (erf(2 * np.pi * self.k * x / self.n2 + self.n2 / 4) \
+                        - erf(2 * np.pi * self.k * x / self.n2 - self.n2 / 4)) - M
 
             try:
                 # dmp, r = newton(eqn, self.x0, maxiter=10, full_output=True, disp=False)
-                dmp, r = ridder(eqn, self.x0[0], self.x0[1], xtol=1e-6, maxiter=10,\
+                dmp, r = ridder(eqn, self.x0[0], self.x0[1], xtol=1e-6, maxiter=10, \
                                 full_output=True, disp=False)
                 if not r.converged:
                     dmp = np.NaN
@@ -81,7 +75,7 @@ class MorletDamping(object):
             except ValueError:
                 dmp = np.NaN
 
-            return dmp
+        return dmp
 
     def set_int_method(self, method):
         self._integration = method
@@ -114,14 +108,13 @@ class MorletDamping(object):
         t = np.arange(npoints) / self.fs
         # From now on `t` is `t - T/2`
         t -= T/2
-        kernel = np.exp(-t * t / s / s / 2) *\
-            np.exp(-1j * eta * t / s)
+        kernel = np.exp(-t * t / s / s / 2) * np.exp(-1j * eta * t / s)
         kernel *= 1 / (np.pi ** 0.25 * np.sqrt(s))
 
         if self._integration == simps:
-            return simps(self.sig[:npoints] * kernel, dx=1 / float(self.fs)) # eq (15)
+            return simps(self.sig[:npoints] * kernel, dx=1/float(self.fs)) # eq (15)
 
-        return np.trapz(self.sig[:npoints] * kernel, dx=1 / float(self.fs)) # eq (15)
+        return np.trapz(self.sig[:npoints] * kernel, dx=1/float(self.fs)) # eq (15)
 
 if __name__ == "__main__":
     fs1 = 100

@@ -4,6 +4,7 @@
 Extended Morlet-Wave damping identification method
 ==================================================
 @author: Ivan Tomac
+
 """
 import numpy as np
 # from scipy.optimize import minimize
@@ -19,16 +20,19 @@ class ExtendedMW(object):
     Extended Morlet-Wave damping identification method
     ==================================================
     Literature:
-        [1]: Tomac, I., Lozina, Ž., Sedlar, D., Extended Morlet-Wave damping identification method
-             International journal of mechanical sciences, 117 (2017), 31-40
-             doi:10.1016/j.ijmecsci.2017.01.013
-        [2]: Slavič, J., Boltežar, M., Damping identification with the Morlet-wave, Mechanical
-             Systems and Signal Processing, 2011, Volume 25, Issue 5, July 2011, Pages 1632-1645,
+        [1]: Slavič, J., Boltežar, M., Damping identification with the Morlet-wave,
+             Mechanical Systems and Signal Processing, 2011, 5
              doi: 10.1016/j.ymssp.2011.01.008
+        [2]: Tomac, I., Lozina, Ž., Sedlar, D., Extended Morlet-Wave damping identification
+             method, International journal of mechanical sciences, 2017, 127
+             doi: 10.1016/j.ijmecsci.2017.01.013
+        [3]: Tomac, I., Slavič, J., Damping identification based on a high-speed camera,
+             Mechanical Systems and Signal Processing, 2022, 166
+             doi: 10.1016/j.ymssp.2021.108485
     """
 
     def __init__(self, fs=None, irf=None, nat_freqs=(None, None), time_spread=(7, 14),
-                 num_cycls_range=None):
+                 num_cycls_range=(30, 50)):
         """
         Constructor of eMWDI object which sets initial parameters for the method.
 
@@ -42,7 +46,7 @@ class ExtendedMW(object):
             verb             - enable/disable messages
         Self:
             n1              - n1 time spread parameter
-            n2              - vector of n2 parameters
+            5n2              - vector of n2 parameters
             k               - vector of all k parameters
             omega_estimated - estimated natural frequency (omega estimated)
             time            - time vector
@@ -56,14 +60,27 @@ class ExtendedMW(object):
 
         """
         # Initialisation
-        if time_spread[0] == 5 and time_spread[1] == 10:
+        dif = np.diff(time_spread)
+        if dif == 5:
             spread_jump = 1 + 1
-        elif time_spread[0] == 7 and time_spread[1] == 14:
+        elif 5 < dif <= 7:
             spread_jump = 1 + 2
-        elif time_spread[0] == 10 and time_spread[1] == 20:
-            spread_jump = 1 + 4 # it is noticed that for lower damping 4 is slightly better
+        elif 7 < dif < 10:
+            spread_jump = 1 + 3
+        elif dif >= 10:
+            spread_jump = 1 #+ 4
         else:
-            spread_jump = 3
+            print("Greska u parametrima n_1 i n_2!")
+            return None
+
+        # if time_spread[0] == 5 and time_spread[1] == 10:
+        #     spread_jump = 1 + 1
+        # elif time_spread[0] == 7 and time_spread[1] == 14:
+        #     spread_jump = 1 + 2
+        # elif time_spread[0] == 10 and time_spread[1] == 20:
+        #     spread_jump = 1 + 4 # it is noticed that for lower damping 4 is slightly better
+        # else:
+        #     spread_jump = 3
 
         self.n1 = time_spread[0]
         self.n2 = np.arange(time_spread[0]+spread_jump, time_spread[1]+1)
@@ -76,6 +93,7 @@ class ExtendedMW(object):
         self.fs = fs
 
         self.zeta_detected = np.zeros((self.n2.size, self.k.size))
+        self.zeta_detected2 = np.zeros((self.k.size))
         self.omega_detected = np.zeros(self.k.size)
         # self.omega_detected = np.zeros((self.n2.size, self.k.size))
 
@@ -119,18 +137,21 @@ class ExtendedMW(object):
             plt.title('Std dev from mean damping value')
 
         if plt3:
-            X, Y = np.meshgrid(self.k, self.n2)
-            Z = self.zeta_detected*100
+            # filters NaN values for all n_2 values.
+            flt = np.sum(np.isnan(self.zeta_detected), axis=0) != self.zeta_detected.shape[0]
+            X, Y = np.meshgrid(self.k[flt], self.n2)
+            Z = self.zeta_detected[:, flt]*100
             fig = plt.figure(figsize=(8, 6), dpi=80)
             ax3 = fig.gca(projection='3d')#plt.axes(projection='3d')
             ax3.plot_surface(X, Y, Z, cmap='viridis', vmin=np.nanmin(Z), vmax=np.nanmax(Z))
             ax3.set(xlabel=r'$k$', ylabel=r'$n_2$', zlabel=r'$\zeta\ (\%)$', title='Damping 3D map')
-            ax3.xaxis.set_ticks(self.k)
+            ax3.xaxis.set_ticks(self.k[flt])
             ax3.yaxis.set_ticks(self.n2)
+        return None
 
     def estimate(self, verb=True):
         """
-        Estimates damping from identified damping values usign the detect() method.
+        Estimates damping from identified damping values using the detect() method.
 
         Args:
             verb - enable/disable meaasges
@@ -143,7 +164,7 @@ class ExtendedMW(object):
             self.k_est = np.nan
             if verb:
                 print("Damping not identified!")
-            return
+            return None
 
         self.zeta = np.mean(self.zeta_detected, 0)[i]
         self.omega = self.omega_detected[i]
@@ -152,6 +173,7 @@ class ExtendedMW(object):
         if verb:
             print("k: %d\tzeta: %.4f%%\tomega = %.2f Hz (%.3f s^-1)"
                   % (self.k_est, self.zeta*100, self.omega/(2*np.pi), self.omega))
+        return None
 
     def detect_amplitude(self, verb=True):
         """
@@ -162,7 +184,7 @@ class ExtendedMW(object):
             self.phi = np.nan
             if verb:
                 print("Input values are NaN.")
-            return
+            return None
 
         k = self.k_est
         n = self.n2[-1]
@@ -184,6 +206,7 @@ class ExtendedMW(object):
             self.phi = np.pi - np.angle(I)
         if verb:
             print("X: %.4e\tphi = %.4f (%.2f deg)" % (self.X, self.phi, self.phi*180/np.pi))
+        return None
 
     def detect_frequency(self, use_estimated=False, verb=False):
         """
@@ -195,12 +218,12 @@ class ExtendedMW(object):
             verb             - enable/disable messages
         """
         if use_estimated:
-            self.omega_detected = self.omega_estimated * np.ones((self.n2.size, self.k.size))
-            return
+            self.omega_detected = np.full((self.k.size), self.omega_estimated)
+            return None
         #####################################################################################
-        # This part of code defines search region for the methods that requier bounded region
+        # This part of code defines search region for the methods that requires bounded region
         # instead of a starting point.
-        ratio = 2*np.log2(31/30) # omega_upper / omega_center (arbitrary - 1Hz on 60Hz)
+        ratio = 2*np.log2(101/100) # omega_upper / omega_center (arbitrary - 1Hz on 30Hz)
 
         if self.omega_next is not None:
             gold_ratio = 2 / (1 + np.sqrt(5))
@@ -224,15 +247,16 @@ class ExtendedMW(object):
         damp.set_int_method(np.trapz)
 
         kitr = 0
-        for i in self.k:
+        for kitr, i in enumerate(self.k):
             lim = int(2*np.pi*i/(self.omega_estimated)*self.fs + 1)     # [2] Eq.(12)
             if lim > self.irf.size:
-                # print(lim, self.omega_estimated, self.fs)
+                # print(lim, self.irf.size, self.omega_estimated, self.fs)
                 print('Maximum iterations reached for: k = ', i)
                 self.zeta_detected = self.zeta_detected[:, :kitr]
+                self.zeta_detected2 = self.zeta_detected2[:kitr]
                 self.omega_detected = self.omega_detected[:kitr]
                 self.k = self.k[:kitr]
-                break
+                return None
 
             damp.k = i
 
@@ -275,11 +299,10 @@ class ExtendedMW(object):
                         print(np.abs(np.diff(test)))
                         print('k = ', i)
                         print('n2 = ', self.n2[-1])
-                    break
+                    return None
             if verb:
                 print("%d\t%.6f\t%.6f" % (i, omega_test, self.omega_detected[kitr]))
-
-            kitr += 1
+        return None
 
     def detect_damp(self, verb=False):
         """
@@ -290,8 +313,14 @@ class ExtendedMW(object):
             fsearch - disable/enable searching of natural frequency
             verb - enable/disable messages
         """
-        damp = MorletDamping(self.irf, self.fs, self.k[0], self.n1, self.n2[0])
+        damp = MorletDamping(self.irf, self.fs, self.k[0], self.n1)
         damp.set_int_method(np.trapz)
+        if self.n1 < 10:
+            # Set Exact method
+            damp.set_root_finding(method="exact")
+        else:
+            # Set Closed-form method
+            damp.set_root_finding(method="close")
 
         kitr = 0
         for i in self.k:
@@ -306,7 +335,6 @@ class ExtendedMW(object):
             damp.k = i
             nitr = 0
             for n2 in self.n2:
-                damp.n2 = n2
 
                 if np.isnan(self.omega_detected[kitr]):
                     self.zeta_detected[nitr, kitr] = np.NaN
@@ -314,15 +342,8 @@ class ExtendedMW(object):
                         print("Damping not detected because frequency is not detected.")
                     break
 
-                if self.n1 < 10:
-                    # Exact method
-                    # damp.set_root_finding(method="exact", x0=0.001)
-                    damp.set_root_finding(method="exact")
-                    dmp = damp.identify_damping(self.omega_detected[kitr], verb)
-                else:
-                    # Closed-form method
-                    damp.set_root_finding(method="close")
-                    dmp = damp.identify_damping(self.omega_detected[kitr], verb)
+                damp.n2 = n2
+                dmp = damp.identify_damping(self.omega_detected[kitr], verb)
 
                 if isinstance(dmp, float) and dmp > 0 and dmp != np.inf:
                     self.zeta_detected[nitr, kitr] = dmp
@@ -342,6 +363,62 @@ class ExtendedMW(object):
                               self.zeta_detected[nitr, kitr]))
                 nitr += 1
             kitr += 1
+
+    def detect_damp2(self, verb=False):
+        """
+        Method detects damping for given range of k parameter and checks if detected
+        damping is feasible. If not then it is set as NaN.
+
+        Args:
+             verb - enable/disable messages
+        """
+        damp = MorletDamping(self.irf, self.fs, self.k[0], self.n1, self.n2[-1])
+        damp.set_int_method(np.trapz)
+
+        kitr = 0
+        for kitr, i in enumerate(self.k):
+            lim = int(2*np.pi*i/(self.omega_estimated)*self.fs + 1)     # [2] Eq.(12)
+            if lim > self.irf.size:
+                # print(lim, self.omega_estimated, self.fs)
+                print('Maximum iterations reached for: k = ', i)
+                self.zeta_detected2 = self.zeta_detected2[:kitr]
+                self.omega_detected = self.omega_detected[:kitr]
+                self.k = self.k[:kitr]
+                return None
+            damp.k = i
+
+            if np.isnan(self.omega_detected[kitr]):
+                self.zeta_detected2[kitr] = np.NaN
+                if verb:
+                    print("Damping not detected because frequency is not detected.")
+                return None
+
+            if self.n1 < 10:
+                # Exact method
+                # damp.set_root_finding(method="exact", x0=0.001)
+                damp.set_root_finding(method="exact")
+                dmp = damp.identify_damping(self.omega_detected[kitr], verb)
+            else:
+                # Closed-form method
+                damp.set_root_finding(method="close")
+                dmp = damp.identify_damping(self.omega_detected[kitr], verb)
+
+            if isinstance(dmp, float) and dmp > 0 and dmp != np.inf:
+                self.zeta_detected2[kitr] = dmp
+                #if self.n1**2/(8*np.pi*i) < dmp or n2**2/(8*np.pi*i) < dmp:
+                if i > self.n1**2/(8*np.pi*dmp):    # [2] Eq.(21)
+                    self.zeta_detected2[kitr] = np.NaN
+                    if verb:
+                        print('zeta = ', dmp)
+                        print('Basic condition is not met: k <= n^2/(8*pi*zeta)')
+                        print('k = ', i, '\tIteration: ', kitr)
+            else:
+                self.zeta_detected2[kitr] = np.NaN
+
+            if verb:
+                print("%d\t%.6f\t%.6f"
+                      % (i, self.omega_detected[kitr], self.zeta_detected2[kitr]))
+        return None
 
 if __name__ == "__main__":
     fs1 = 64
