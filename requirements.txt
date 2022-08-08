@@ -1,0 +1,5 @@
+numpy
+scipy
+mwdi==0.71
+pylint
+pytest
