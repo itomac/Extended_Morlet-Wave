@@ -83,9 +83,11 @@ References
 .. [2] I\. Tomac, J. Slavič, Damping identification based on a high-speed camera. Mechanical Systems and Signal Processing, 166 (2022) 108485–108497, doi: `10.1016/j.ymssp.2021.108485`_.
 .. [3] J\. Slavič, M. Boltežar, Damping identification with the Morlet-wave, Mechanical Systems and Signal Processing, 25 (2011) 1632–1645, doi: `10.1016/j.ymssp.2011.01.008`_.
 
+.. image:: https://zenodo.org/badge/220045505.svg
+   :target: https://zenodo.org/badge/latestdoi/220045505
+
 .. _NOSTRADAMUS: http://ladisk.si/?what=incfl&flnm=nostradamus.php
 .. _mwdi: https://github.com/ladisk/mwdi
 .. _10.1016/j.ymssp.2011.01.008: https://doi.org/10.1016/j.ymssp.2011.01.008
 .. _10.1016/j.ijmecsci.2017.01.013: https://doi.org/10.1016/j.ijmecsci.2017.01.013
 .. _10.1016/j.ymssp.2021.108485: https://doi.org/10.1016/j.ymssp.2021.108485
-
