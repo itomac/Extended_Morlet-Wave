@@ -184,7 +184,7 @@ class ExtendedMW(object):
 
         I_tilde = self.identifier_morlet_wave.morlet_integrate(self.omega, n, k) 
 
-        self.X = get_amplitude(k, n, self.zeta, self.omega, np.abs(I_tilde))
+        self.X = get_amplitude(k, n, self.zeta, self.omega, I_tilde)
         self.phi = -np.angle((-1)**(k) * I_tilde)
 
         if verb:
